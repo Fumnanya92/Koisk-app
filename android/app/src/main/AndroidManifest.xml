@@ -1,0 +1,119 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.fynko.infinitykiosk">
+
+    <!-- ========== REQUIRED PERMISSIONS ========== -->
+    <!-- Device admin - needed to operate in Device Owner mode -->
+    <uses-permission android:name="android.permission.DEVICE_ADMIN" />
+
+    <!-- Boot completed - needed to auto-launch app on device startup -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <!-- Call phone - needed for admin dialer functionality -->
+    <uses-permission android:name="android.permission.CALL_PHONE" />
+
+    <!-- Reorder tasks - needed for lock task mode and app control -->
+    <uses-permission android:name="android.permission.REORDER_TASKS" />
+
+    <!-- Disable keyguard - needed to bypass lock screen when launching -->
+    <uses-permission android:name="android.permission.DISABLE_KEYGUARD" />
+
+    <!-- Wake lock - needed to ensure device is awake on boot -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+    <!-- Internet permission - optional, for future features -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Admin-managed APK updates via the system package installer -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
+    <!-- ========== PACKAGE QUERIES (Android 11+) ========== -->
+    <!-- Required for launching apps on Android 11+; defines visible packages -->
+    <queries>
+        <!-- Query for AccessCode NG app -->
+        <package android:name="ng.accesscode.app" />
+        
+        <!-- Query for dialer and phone apps -->
+        <package android:name="com.android.dialer" />
+        <package android:name="com.android.phone" />
+        
+        <!-- Intent query for finding launcher apps -->
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+        
+        <!-- Intent query for dial/call functionality -->
+        <intent>
+            <action android:name="android.intent.action.DIAL" />
+            <data android:scheme="tel" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.CALL" />
+            <data android:scheme="tel" />
+        </intent>
+    </queries>
+
+    <!-- ========== APPLICATION CONFIGURATION ========== -->
+    <application
+        android:label="Kiosk"
+        android:icon="@drawable/ic_launcher">
+
+        <meta-data
+            android:name="flutterEmbedding"
+            android:value="2" />
+
+        <!-- ========== MAIN ACTIVITY ========== -->
+        <!-- This is the kiosk screen - becomes the home screen when device owner is set -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:showWhenLocked="true"
+            android:lockTaskMode="always"
+            android:screenOrientation="portrait">
+
+            <!-- Make this the default launcher/home screen -->
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+                <!-- HOME category makes this the home screen -->
+                <category android:name="android.intent.category.HOME" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
+        <!-- ========== DEVICE ADMIN RECEIVER ========== -->
+        <!-- Receives device owner callbacks and handles admin policies -->
+        <!-- Note: Package name must match LauncherActivity for device owner setup -->
+        <receiver
+            android:name=".AdminReceiver"
+            android:permission="android.permission.BIND_DEVICE_ADMIN"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.app.action.DEVICE_ADMIN_ENABLED" />
+                <action android:name="android.app.action.DEVICE_ADMIN_DISABLE_REQUESTED" />
+                <action android:name="android.app.action.DEVICE_ADMIN_DISABLED" />
+                <action android:name="android.app.action.LOCK_TASK_ENTERING" />
+                <action android:name="android.app.action.LOCK_TASK_EXITING" />
+            </intent-filter>
+            <meta-data
+                android:name="android.app.device_admin"
+                android:resource="@xml/device_admin_policies" />
+        </receiver>
+
+        <!-- ========== BOOT RECEIVER ========== -->
+        <!-- Auto-launches app when device boots (after factory reset or power on) -->
+        <receiver
+            android:name=".BootReceiver"
+            android:exported="true">
+            <intent-filter android:priority="1000">
+                <!-- Standard boot broadcast -->
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <!-- Quick boot (HTC devices) -->
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+            </intent-filter>
+        </receiver>
+
+    </application>
+
+</manifest>

@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<device-admin xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Describe the Device Admin app -->
+    <description>@string/device_admin_description</description>
+
+    <!-- Specify the policies for this Device Admin -->
+    <uses-policies>
+        <!-- Allow device lock/unlock -->
+        <limit-password />
+
+        <!-- Allow monitoring of screen on/off state -->
+        <watch-login />
+
+        <!-- Allow resetting password (for lock task mode) -->
+        <reset-password />
+
+        <!-- Allow forcing device lock -->
+        <force-lock />
+
+        <!-- Allow uninstalling packages via DeviceOwner -->
+        <disable-uninstall-apps />
+
+        <!-- Allow access to usage statistics -->
+        <disable-accounting />
+
+        <!-- Allow setting restrictions -->
+        <disable-keyguard-features />
+    </uses-policies>
+
+</device-admin>

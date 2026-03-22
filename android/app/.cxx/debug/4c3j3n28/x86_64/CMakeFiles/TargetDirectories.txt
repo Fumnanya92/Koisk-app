@@ -1,0 +1,2 @@
+C:/Users/DELL.COM/Desktop/Darey/koisk-app/android/app/.cxx/debug/4c3j3n28/x86_64/CMakeFiles/edit_cache.dir
+C:/Users/DELL.COM/Desktop/Darey/koisk-app/android/app/.cxx/debug/4c3j3n28/x86_64/CMakeFiles/rebuild_cache.dir

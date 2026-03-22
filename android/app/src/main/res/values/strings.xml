@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Infinity Kiosk</string>
+    <string name="device_admin_description">Device Admin for Kiosk Mode - Enables secure device management and lock task mode</string>
+</resources>
