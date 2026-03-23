@@ -32,6 +32,11 @@ class AppConfig {
   static const Duration pinDialogTimeout = Duration(minutes: 5);
   static const Duration screenLockTimeout = Duration(minutes: 30);
 
+  // Battery monitoring thresholds
+  static const int lowBatteryThreshold = 20; // Alert when below 20%
+  static const int criticalBatteryThreshold = 10; // Critical alert at 10%
+  static const Duration batteryCheckInterval = Duration(seconds: 30);
+
   // Logging
   static const bool enableLogging = true;
   static const bool enableDetailedLogging = false; // Only in debug builds

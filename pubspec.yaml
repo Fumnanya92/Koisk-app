@@ -27,6 +27,9 @@ dependencies:
   # STORAGE: Lightweight key-value storage for non-sensitive data
   shared_preferences: ^2.2.2
 
+  # BATTERY MONITORING: Track device battery level for alerts
+  battery_plus: ^7.0.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

@@ -5,6 +5,7 @@ import 'dart:async';
 import '../constants/app_config.dart';
 import '../services/kiosk_service.dart';
 import '../services/pin_service.dart';
+import '../services/battery_monitoring_service.dart';
 import '../utils/logger.dart';
 import 'admin_panel_screen.dart';
 
@@ -24,6 +25,10 @@ class _KioskScreenState extends State<KioskScreen> with WidgetsBindingObserver {
   Timer? _screensaverTimer; // Auto-lock timer
   Timer? _clockTimer; // Clock update timer
   DateTime _currentTime = DateTime.now();
+  
+  // Battery monitoring
+  BatteryMonitoringService? _batteryService;
+  StreamSubscription<int>? _batterySubscription;
 
   @override
   void initState() {
@@ -33,6 +38,7 @@ class _KioskScreenState extends State<KioskScreen> with WidgetsBindingObserver {
     _checkDeviceOwnerStatus();
     _enforceImmersiveMode();
     _startClockTimer();
+    _initializeBatteryMonitoring();
   }
 
   void _startClockTimer() {
@@ -45,11 +51,64 @@ class _KioskScreenState extends State<KioskScreen> with WidgetsBindingObserver {
     });
   }
 
+  Future<void> _initializeBatteryMonitoring() async {
+    final batteryService = BatteryMonitoringService();
+    _batteryService = batteryService;
+    await batteryService.initialize();
+    
+    if (!mounted) return;
+
+    setState(() {});
+    
+    // Listen to battery level changes and update UI
+    _batterySubscription = batteryService.batteryStream.listen((level) {
+      if (!mounted) return;
+      
+      setState(() {});
+      
+      // Show alert dialog for critical battery
+      if (level <= 10) {
+        _showCriticalBatteryAlert(level);
+      }
+    });
+  }
+
+  void _showCriticalBatteryAlert(int level) {
+    if (!mounted) return;
+    
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A2E),
+        icon: const Icon(Icons.battery_alert, color: Color(0xFFFF5252), size: 48),
+        title: const Text(
+          '🔴 CRITICAL BATTERY',
+          style: TextStyle(color: Color(0xFFFF5252), fontWeight: FontWeight.bold),
+        ),
+        content: Text(
+          'Battery level: $level%\n\n'
+          'Device may shut down soon. '
+          'Please alert security to charge the kiosk immediately.',
+          style: const TextStyle(color: Colors.white70, height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('OK', style: TextStyle(color: Color(0xFF4FC3F7))),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _screensaverTimer?.cancel(); // Cancel any pending timer
     _clockTimer?.cancel(); // Cancel clock timer
+    _batterySubscription?.cancel();
+    _batteryService?.dispose(); // Clean up battery monitoring
     super.dispose();
   }
 
@@ -357,29 +416,78 @@ class _KioskScreenState extends State<KioskScreen> with WidgetsBindingObserver {
         backgroundColor: const Color(0xFF0D1117),
         body: Column(
           children: [
-            // Clock display at top
+            // Clock and Battery display at top
             Padding(
-              padding: const EdgeInsets.only(top: 12, right: 20),
-              child: Align(
-                alignment: Alignment.topRight,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: Colors.black26,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.blue[400]!, width: 1),
-                  ),
-                  child: Text(
-                    _formatTime(_currentTime),
-                    style: TextStyle(
-                      color: Colors.blue[400],
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                      fontFamily: 'monospace',
-                      letterSpacing: 0.5,
+              padding: const EdgeInsets.only(top: 12, right: 20, left: 20),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  // Battery status on left
+                  if (_batteryService != null)
+                    StreamBuilder<int>(
+                      stream: _batteryService!.batteryStream,
+                      initialData: _batteryService!.currentBatteryLevel,
+                      builder: (context, snapshot) {
+                        final batteryService = _batteryService!;
+                        final level = batteryService.currentBatteryLevel;
+                        final status = batteryService.getBatteryStatus();
+                        final isLow = batteryService.isLowBattery;
+                        
+                        return Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: isLow ? Colors.red.withValues(alpha: 0.2) : Colors.black26,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: isLow ? Colors.red : Colors.green[400]!,
+                              width: 1,
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                level > 50 ? Icons.battery_full :
+                                level > 20 ? Icons.battery_3_bar :
+                                Icons.battery_alert,
+                                color: isLow ? Colors.red : Colors.green[400],
+                                size: 18,
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                status,
+                                style: TextStyle(
+                                  color: isLow ? Colors.red : Colors.green[400],
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                  fontFamily: 'monospace',
+                                  letterSpacing: 0.3,
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  // Clock display on right
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.black26,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.blue[400]!, width: 1),
+                    ),
+                    child: Text(
+                      _formatTime(_currentTime),
+                      style: TextStyle(
+                        color: Colors.blue[400],
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                        fontFamily: 'monospace',
+                        letterSpacing: 0.5,
+                      ),
                     ),
                   ),
-                ),
+                ],
               ),
             ),
             // Main content

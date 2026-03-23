@@ -76,3 +76,22 @@ local.properties
 
 # Exceptions to above rules.
 !/packages/flutter_tools/test/data/dart_dependencies_test/**/.packages
+
+# Build logs and temp files
+*.log
+flutter-build.*.log
+flutter-run.*.log
+
+# Sensitive files
+*.jks
+*.keystore
+.env
+.env.local
+secrets.gradle
+
+# IDE specific
+.vscode/launch.json
+.vscode/settings.json
+*.sublime-project
+*.sublime-workspace
+
