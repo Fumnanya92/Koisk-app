@@ -37,6 +37,13 @@ class AppConfig {
   static const int criticalBatteryThreshold = 10; // Critical alert at 10%
   static const Duration batteryCheckInterval = Duration(seconds: 30);
 
+  // Incoming calls preference key (stored natively in SharedPreferences)
+  static const String incomingCallsEnabledKey = 'incoming_calls_enabled';
+
+  // Wi-Fi auto-reconnect
+  static const Duration wifiCheckInterval = Duration(seconds: 30);
+  static const int wifiMaxFailuresBeforeAlert = 5;
+
   // Logging
   static const bool enableLogging = true;
   static const bool enableDetailedLogging = false; // Only in debug builds
@@ -60,6 +67,10 @@ class KioskMethods {
   static const String setGlobalSettings = 'setGlobalSettings';
   static const String applyKioskRestrictions = 'applyKioskRestrictions';
   static const String getDeviceInfo = 'getDeviceInfo';
+  static const String getWifiStatus = 'getWifiStatus';
+  static const String setWifiEnabled = 'setWifiEnabled';
+  static const String reconnectWifi = 'reconnectWifi';
+  static const String setIncomingCallsEnabled = 'setIncomingCallsEnabled';
 }
 
 /// UI Colors

@@ -23,6 +23,11 @@
     <!-- Internet permission - optional, for future features -->
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!-- Wi-Fi state reading and control -->
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
     <!-- Admin-managed APK updates via the system package installer -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
