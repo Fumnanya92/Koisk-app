@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:infinity_kiosk/constants/app_config.dart';
 import 'package:infinity_kiosk/screens/kiosk_screen.dart';
 import 'package:infinity_kiosk/services/wifi_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -29,6 +30,9 @@ void main() {
   setUp(() {
     FlutterSecureStorage.setMockInitialValues({
       'admin_pin_v1': AppConfig.defaultAdminPin,
+    });
+    SharedPreferences.setMockInitialValues({
+      AppConfig.incomingCallsEnabledKey: false,
     });
     methodCalls.clear();
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger

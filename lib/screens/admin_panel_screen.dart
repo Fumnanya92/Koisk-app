@@ -481,7 +481,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                             style: TextStyle(color: Colors.white54, fontSize: 12),
                           ),
                           value: _incomingCallsEnabled,
-                          activeColor: const Color(0xFF4FC3F7),
+                          activeThumbColor: const Color(0xFF4FC3F7),
                           onChanged: _setIncomingCalls,
                         ),
                       ],

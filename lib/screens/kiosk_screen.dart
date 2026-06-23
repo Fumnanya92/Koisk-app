@@ -185,7 +185,7 @@ class _KioskScreenState extends State<KioskScreen> with WidgetsBindingObserver {
                           style: TextStyle(color: Colors.white),
                         ),
                         value: status.isEnabled,
-                        activeColor: const Color(0xFF4FC3F7),
+                        activeThumbColor: const Color(0xFF4FC3F7),
                         onChanged: (val) async {
                           await WifiService.instance.setWifiEnabled(val);
                           setS(() {});
