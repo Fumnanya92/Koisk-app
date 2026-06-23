@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:infinity_kiosk/constants/app_config.dart';
 import 'package:infinity_kiosk/screens/admin_panel_screen.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -11,6 +12,9 @@ void main() {
   final methodCalls = <MethodCall>[];
 
   setUp(() {
+    SharedPreferences.setMockInitialValues({
+      AppConfig.incomingCallsEnabledKey: false,
+    });
     methodCalls.clear();
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (call) async {
@@ -31,6 +35,14 @@ void main() {
         .setMockMethodCallHandler(channel, null);
   });
 
+  testWidgets('shows incoming calls toggle in Communication section', (tester) async {
+    await tester.pumpWidget(const MaterialApp(home: AdminPanelScreen()));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Incoming Calls'), findsOneWidget);
+    expect(find.byType(SwitchListTile), findsOneWidget);
+  });
+
   testWidgets('Exit Kiosk Mode confirms and invokes native stop', (tester) async {
     await tester.pumpWidget(
       const MaterialApp(
@@ -39,7 +51,8 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Exit Kiosk Mode'));
+    await tester.ensureVisible(find.text('Exit Kiosk Mode'));
+    await tester.tap(find.text('Exit Kiosk Mode'), warnIfMissed: false);
     await tester.pumpAndSettle();
 
     expect(find.text('Exit Kiosk Mode?'), findsOneWidget);

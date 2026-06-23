@@ -10,6 +10,7 @@
 /// All actions require PIN verification before proceeding.
 
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async';
 import '../constants/app_config.dart';
 import '../services/kiosk_service.dart';
@@ -26,6 +27,7 @@ class AdminPanelScreen extends StatefulWidget {
 class _AdminPanelScreenState extends State<AdminPanelScreen> {
   bool _isDeviceOwner = false;
   bool _isLoading = false;
+  bool _incomingCallsEnabled = false;
   String? _deviceInfo;
   Timer? _inactivityTimer;
   int _secondsRemaining = 1800; // 30 minutes
@@ -82,6 +84,12 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
       if (info != null) {
         setState(() => _deviceInfo = info.toString());
       }
+
+      // Load incoming calls preference
+      final prefs = await SharedPreferences.getInstance();
+      setState(() {
+        _incomingCallsEnabled = prefs.getBool(AppConfig.incomingCallsEnabledKey) ?? false;
+      });
 
       Logger.info('Device status loaded', context: 'AdminPanel');
     } catch (e, st) {
@@ -324,6 +332,24 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
   }
 
   /// Show snackbar message
+  Future<void> _setIncomingCalls(bool enabled) async {
+    _resetInactivityTimer();
+    final success = await KioskService.setIncomingCallsEnabled(enabled);
+    if (!mounted) return;
+
+    if (success) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(AppConfig.incomingCallsEnabledKey, enabled);
+      setState(() => _incomingCallsEnabled = enabled);
+      _showSnackbar(
+        enabled ? 'Incoming calls enabled' : 'Incoming calls disabled',
+        color: enabled ? Colors.green : Colors.orange,
+      );
+    } else {
+      _showSnackbar('Could not update incoming calls setting', color: Colors.red);
+    }
+  }
+
   void _showSnackbar(String message, {required Color color}) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -433,6 +459,31 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                             ),
                           ),
                         ],
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+
+                    // Communication Section
+                    _SectionCard(
+                      title: 'Communication',
+                      children: [
+                        SwitchListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text(
+                            'Incoming Calls',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          subtitle: const Text(
+                            'Allow incoming calls to ring through on this device.',
+                            style: TextStyle(color: Colors.white54, fontSize: 12),
+                          ),
+                          value: _incomingCallsEnabled,
+                          activeColor: const Color(0xFF4FC3F7),
+                          onChanged: _setIncomingCalls,
+                        ),
                       ],
                     ),
                     const SizedBox(height: 20),
