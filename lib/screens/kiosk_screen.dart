@@ -6,6 +6,7 @@ import '../constants/app_config.dart';
 import '../services/kiosk_service.dart';
 import '../services/pin_service.dart';
 import '../services/battery_monitoring_service.dart';
+import '../services/wifi_service.dart';
 import '../utils/logger.dart';
 import 'admin_panel_screen.dart';
 
@@ -30,6 +31,10 @@ class _KioskScreenState extends State<KioskScreen> with WidgetsBindingObserver {
   BatteryMonitoringService? _batteryService;
   StreamSubscription<int>? _batterySubscription;
 
+  // Wi-Fi monitoring
+  StreamSubscription<WifiStatus>? _wifiSubscription;
+  WifiStatus _wifiStatus = const WifiStatus(WifiConnectionState.disabled);
+
   @override
   void initState() {
     super.initState();
@@ -39,6 +44,7 @@ class _KioskScreenState extends State<KioskScreen> with WidgetsBindingObserver {
     _enforceImmersiveMode();
     _startClockTimer();
     _initializeBatteryMonitoring();
+    _initializeWifiMonitoring();
   }
 
   void _startClockTimer() {
@@ -73,6 +79,144 @@ class _KioskScreenState extends State<KioskScreen> with WidgetsBindingObserver {
     });
   }
 
+  void _initializeWifiMonitoring() {
+    _wifiStatus = WifiService.instance.currentStatus;
+    _wifiSubscription = WifiService.instance.wifiStream.listen((status) {
+      if (!mounted) return;
+      setState(() => _wifiStatus = status);
+      if (WifiService.instance.shouldShowPersistentAlert) {
+        _showWifiPersistentAlert();
+      }
+    });
+  }
+
+  void _showWifiPersistentAlert() {
+    if (!mounted) return;
+    showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A2E),
+        icon: const Icon(Icons.wifi_off, color: Colors.orange, size: 36),
+        title: const Text(
+          'Wi-Fi Not Connecting',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        content: const Text(
+          'The kiosk has been unable to reconnect to Wi-Fi after several attempts.\n\n'
+          'Please check the router or contact your network administrator.',
+          style: TextStyle(color: Colors.white70, height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              WifiService.instance.reconnect();
+            },
+            child: const Text('Try Again', style: TextStyle(color: Color(0xFF4FC3F7))),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Dismiss', style: TextStyle(color: Colors.white38)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showWifiBottomSheet() {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: const Color(0xFF1A1A2E),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setS) => Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.white24,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Wi-Fi',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 8),
+              StreamBuilder<WifiStatus>(
+                stream: WifiService.instance.wifiStream,
+                initialData: WifiService.instance.currentStatus,
+                builder: (context, snapshot) {
+                  final status = snapshot.data ?? WifiService.instance.currentStatus;
+                  final statusText = switch (status.state) {
+                    WifiConnectionState.connected => 'Connected',
+                    WifiConnectionState.disconnected => 'Not connected',
+                    WifiConnectionState.disabled => 'Wi-Fi Off',
+                  };
+                  final statusColor = switch (status.state) {
+                    WifiConnectionState.connected => Colors.green[400]!,
+                    WifiConnectionState.disconnected => Colors.orange,
+                    WifiConnectionState.disabled => Colors.grey,
+                  };
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(statusText, style: TextStyle(color: statusColor, fontSize: 14)),
+                      const SizedBox(height: 16),
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text(
+                          'Enable Wi-Fi',
+                          style: TextStyle(color: Colors.white),
+                        ),
+                        value: status.isEnabled,
+                        activeColor: const Color(0xFF4FC3F7),
+                        onChanged: (val) async {
+                          await WifiService.instance.setWifiEnabled(val);
+                          setS(() {});
+                        },
+                      ),
+                      if (status.state == WifiConnectionState.disconnected) ...[
+                        const SizedBox(height: 8),
+                        ElevatedButton.icon(
+                          onPressed: () async {
+                            await WifiService.instance.reconnect();
+                            setS(() {});
+                          },
+                          icon: const Icon(Icons.refresh),
+                          label: const Text('Reconnect Now'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF1A237E),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                          ),
+                        ),
+                      ],
+                    ],
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   void _showCriticalBatteryAlert(int level) {
     if (!mounted) return;
     
@@ -105,10 +249,11 @@ class _KioskScreenState extends State<KioskScreen> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _screensaverTimer?.cancel(); // Cancel any pending timer
-    _clockTimer?.cancel(); // Cancel clock timer
+    _screensaverTimer?.cancel();
+    _clockTimer?.cancel();
     _batterySubscription?.cancel();
-    _batteryService?.dispose(); // Clean up battery monitoring
+    _batteryService?.dispose();
+    _wifiSubscription?.cancel();
     super.dispose();
   }
 
@@ -422,7 +567,35 @@ class _KioskScreenState extends State<KioskScreen> with WidgetsBindingObserver {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  // Battery status on left
+                  // Wi-Fi icon on far left
+                  GestureDetector(
+                    onTap: _showWifiBottomSheet,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.black26,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: switch (_wifiStatus.state) {
+                            WifiConnectionState.connected => Colors.green[400]!,
+                            WifiConnectionState.disconnected => Colors.orange,
+                            WifiConnectionState.disabled => Colors.grey,
+                          },
+                          width: 1,
+                        ),
+                      ),
+                      child: Icon(
+                        _wifiStatus.isConnected ? Icons.wifi : Icons.wifi_off,
+                        color: switch (_wifiStatus.state) {
+                          WifiConnectionState.connected => Colors.green[400]!,
+                          WifiConnectionState.disconnected => Colors.orange,
+                          WifiConnectionState.disabled => Colors.grey,
+                        },
+                        size: 18,
+                      ),
+                    ),
+                  ),
+                  // Battery status
                   if (_batteryService != null)
                     StreamBuilder<int>(
                       stream: _batteryService!.batteryStream,
@@ -490,6 +663,28 @@ class _KioskScreenState extends State<KioskScreen> with WidgetsBindingObserver {
                 ],
               ),
             ),
+            // Wi-Fi disconnection banner
+            if (_wifiStatus.state == WifiConnectionState.disconnected)
+              Container(
+                width: double.infinity,
+                color: Colors.orange.withValues(alpha: 0.15),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.wifi_off, color: Colors.orange, size: 14),
+                    SizedBox(width: 6),
+                    Text(
+                      'Wi-Fi disconnected — reconnecting…',
+                      style: TextStyle(
+                        color: Colors.orange,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             // Main content
             Expanded(
               child: Center(

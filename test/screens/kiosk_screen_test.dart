@@ -4,6 +4,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:infinity_kiosk/constants/app_config.dart';
 import 'package:infinity_kiosk/screens/kiosk_screen.dart';
+import 'package:infinity_kiosk/services/wifi_service.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -47,6 +48,7 @@ void main() {
   tearDown(() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, null);
+    WifiService.instance.dispose();
   });
 
   testWidgets('Open AccessCode NG button invokes native launch', (tester) async {
@@ -75,6 +77,43 @@ void main() {
       methodCalls.any((call) => call.method == KioskMethods.openDialer),
       isTrue,
     );
+  });
+
+  testWidgets('shows Wi-Fi icon in header', (tester) async {
+    await pumpScreen(tester);
+    // Either wifi or wifi_off icon is present depending on mock status
+    final wifiIcon = find.byWidgetPredicate(
+      (w) => w is Icon && (w.icon == Icons.wifi || w.icon == Icons.wifi_off),
+    );
+    expect(wifiIcon, findsWidgets);
+  });
+
+  testWidgets('shows disconnection banner when Wi-Fi disconnected', (tester) async {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+      if (call.method == KioskMethods.getWifiStatus) {
+        return {'enabled': true, 'connected': false};
+      }
+      if (call.method == KioskMethods.isDeviceOwner) return true;
+      if (call.method == KioskMethods.reconnectWifi) return false;
+      return true;
+    });
+
+    // Initialize so currentStatus is already disconnected when KioskScreen reads it
+    await WifiService.instance.initialize();
+    await tester.pumpWidget(const MaterialApp(home: KioskScreen()));
+    await tester.pump(); // let initState run and read currentStatus
+
+    // Cancel the periodic timer before pumpAndSettle so no pending timers remain
+    WifiService.instance.dispose();
+    await tester.pumpAndSettle();
+
+    if (find.text('OK').evaluate().isNotEmpty) {
+      await tester.tap(find.text('OK'));
+      await tester.pumpAndSettle();
+    }
+
+    expect(find.text('Wi-Fi disconnected — reconnecting…'), findsOneWidget);
   });
 
   testWidgets('entering correct admin PIN opens admin panel', (tester) async {
