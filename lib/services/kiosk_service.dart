@@ -309,4 +309,33 @@ abstract class KioskService {
       );
     }
   }
+
+  /// Enable or disable incoming calls ringing through over the kiosk screen.
+  /// When enabled, the system phone app is whitelisted in lock task mode.
+  /// Setting is persisted natively and survives reboots.
+  static Future<bool> setIncomingCallsEnabled(bool enabled) async {
+    try {
+      Logger.info('Setting incoming calls enabled: $enabled', context: 'KioskService');
+      await _channel.invokeMethod<void>(
+        KioskMethods.setIncomingCallsEnabled,
+        {'enabled': enabled},
+      );
+      Logger.info('Incoming calls setting updated to $enabled', context: 'KioskService');
+      return true;
+    } on PlatformException catch (e) {
+      Logger.error(
+        'PlatformException setting incoming calls: ${e.message}',
+        context: 'KioskService',
+      );
+      return false;
+    } catch (e, st) {
+      Logger.error(
+        'Error setting incoming calls',
+        context: 'KioskService',
+        error: e is Error ? e : null,
+        stackTrace: st,
+      );
+      return false;
+    }
+  }
 }

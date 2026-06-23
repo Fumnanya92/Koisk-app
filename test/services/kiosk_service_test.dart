@@ -59,4 +59,18 @@ void main() {
     expect(result, isFalse);
     expect(methodCalls.single.method, KioskMethods.isDeviceOwner);
   });
+
+  test('setIncomingCallsEnabled sends correct value to platform', () async {
+    methodCalls.clear();
+
+    await KioskService.setIncomingCallsEnabled(true);
+    expect(methodCalls.last.method, KioskMethods.setIncomingCallsEnabled);
+    expect(methodCalls.last.arguments['enabled'], isTrue);
+
+    methodCalls.clear();
+
+    await KioskService.setIncomingCallsEnabled(false);
+    expect(methodCalls.last.method, KioskMethods.setIncomingCallsEnabled);
+    expect(methodCalls.last.arguments['enabled'], isFalse);
+  });
 }

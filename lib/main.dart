@@ -21,6 +21,7 @@ import 'constants/app_config.dart';
 import 'screens/kiosk_screen.dart';
 import 'services/kiosk_service.dart';
 import 'services/pin_service.dart';
+import 'services/wifi_service.dart';
 import 'utils/logger.dart';
 
 void main() async {
@@ -57,6 +58,10 @@ void main() async {
     // This enables lock task mode if device is device owner
     // If device owner not set, app will still run but security is limited
     await KioskService.initialize();
+
+    // Initialize Wi-Fi monitoring service
+    await WifiService.instance.initialize();
+    Logger.info('Wi-Fi service initialized', context: 'main');
 
     Logger.info('Initialization complete - launching app', context: 'main');
 
