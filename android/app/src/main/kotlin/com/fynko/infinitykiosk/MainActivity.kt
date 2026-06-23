@@ -20,6 +20,9 @@ import android.view.WindowInsetsController
 import android.view.WindowManager
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
+import android.net.wifi.WifiManager
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 
@@ -53,6 +56,7 @@ class MainActivity : FlutterActivity() {
         private const val PREFS_NAME = "kiosk_prefs"
         private const val KEY_EXIT_KIOSK_REQUESTED = "exit_kiosk_requested"
         private const val REQUEST_CODE_PICK_UPDATE_APK = 1001
+        private const val KEY_INCOMING_CALLS_ENABLED = "incoming_calls_enabled"
 
         @JvmStatic
         fun isExitRequested(context: Context): Boolean {
@@ -93,6 +97,17 @@ class MainActivity : FlutterActivity() {
         
         // Add system dialer and phone apps for incoming/outgoing calls
         allowLockTaskPackages(getSystemDialerPackage(), getSystemPhonePackage())
+
+        // Re-apply incoming calls preference from previous session
+        val incomingCallsEnabled = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getBoolean(KEY_INCOMING_CALLS_ENABLED, false)
+        if (incomingCallsEnabled) {
+            allowLockTaskPackages(getSystemDialerPackage(), getSystemPhonePackage())
+            Log.i(TAG, "Incoming calls re-enabled from saved preference")
+        } else {
+            rebuildLockTaskWithoutPhone()
+            Log.i(TAG, "Incoming calls remain disabled (saved preference)")
+        }
     }
 
     override fun onResume() {
@@ -208,6 +223,17 @@ class MainActivity : FlutterActivity() {
                         "launchApp" -> handleLaunchApp(call, result)
                         "openDialer" -> handleOpenDialer(call, result)
                         "getDeviceInfo" -> result.success(getDeviceInfo())
+                        "getWifiStatus" -> result.success(getWifiStatus())
+                        "setWifiEnabled" -> {
+                            val enabled = call.argument<Boolean>("enabled") ?: false
+                            result.success(setWifiEnabled(enabled))
+                        }
+                        "reconnectWifi" -> result.success(reconnectWifi())
+                        "setIncomingCallsEnabled" -> {
+                            val enabled = call.argument<Boolean>("enabled") ?: false
+                            setIncomingCallsEnabled(enabled)
+                            result.success(null)
+                        }
                         else -> result.notImplemented()
                     }
                 } catch (e: Exception) {
@@ -927,7 +953,7 @@ class MainActivity : FlutterActivity() {
             "com.samsung.android.phone",
             "com.htc.android.phone"
         )
-        
+
         for (pkgName in commonPhonePackages) {
             try {
                 packageManager.getPackageInfo(pkgName, 0)
@@ -937,8 +963,85 @@ class MainActivity : FlutterActivity() {
                 // Package not found, continue
             }
         }
-        
+
         Log.w(TAG, "No system phone package found")
         return "com.android.phone"
+    }
+
+    /// ========================================================================
+    /// Wi-Fi Control Methods
+    /// ========================================================================
+
+    private fun getWifiStatus(): Map<String, Any> {
+        val wifiManager = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+        val enabled = wifiManager.isWifiEnabled
+
+        val connected = if (enabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+            val caps = cm.getNetworkCapabilities(cm.activeNetwork)
+            caps?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true
+        } else if (enabled) {
+            @Suppress("DEPRECATION")
+            wifiManager.connectionInfo?.networkId != -1
+        } else {
+            false
+        }
+
+        Log.d(TAG, "Wi-Fi status — enabled: $enabled, connected: $connected")
+        return mapOf("enabled" to enabled, "connected" to connected)
+    }
+
+    @Suppress("DEPRECATION")
+    private fun setWifiEnabled(enabled: Boolean): Boolean {
+        return try {
+            val wifiManager = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+            val result = wifiManager.setWifiEnabled(enabled)
+            Log.i(TAG, "setWifiEnabled($enabled) → $result")
+            result
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to set Wi-Fi enabled: ${e.message}", e)
+            false
+        }
+    }
+
+    private fun reconnectWifi(): Boolean {
+        return try {
+            val wifiManager = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+            val result = wifiManager.reconnect()
+            Log.i(TAG, "reconnectWifi() → $result")
+            result
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to reconnect Wi-Fi: ${e.message}", e)
+            false
+        }
+    }
+
+    /// ========================================================================
+    /// Incoming Calls Toggle
+    /// ========================================================================
+
+    private fun setIncomingCallsEnabled(enabled: Boolean) {
+        getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_INCOMING_CALLS_ENABLED, enabled)
+            .apply()
+
+        if (enabled) {
+            allowLockTaskPackages(getSystemDialerPackage(), getSystemPhonePackage())
+            Log.i(TAG, "Incoming calls enabled — phone apps added to lock task whitelist")
+        } else {
+            rebuildLockTaskWithoutPhone()
+            Log.i(TAG, "Incoming calls disabled — phone apps removed from lock task whitelist")
+        }
+    }
+
+    private fun rebuildLockTaskWithoutPhone() {
+        if (!isDeviceOwner()) return
+        try {
+            devicePolicyManager.setLockTaskPackages(adminComponent, arrayOf(packageName))
+            Log.d(TAG, "Lock task packages rebuilt (phone apps excluded)")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to rebuild lock task packages: ${e.message}", e)
+        }
     }
 }
