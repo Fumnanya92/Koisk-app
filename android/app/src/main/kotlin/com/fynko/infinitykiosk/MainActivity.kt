@@ -249,6 +249,12 @@ class MainActivity : FlutterActivity() {
                             setIncomingCallsEnabled(enabled)
                             result.success(null)
                         }
+                        "scanWifiNetworks" -> result.success(scanWifiNetworks())
+                        "connectToWifiNetwork" -> {
+                            val ssid = call.argument<String>("ssid") ?: ""
+                            val password = call.argument<String>("password") ?: ""
+                            result.success(connectToWifiNetwork(ssid, password))
+                        }
                         else -> result.notImplemented()
                     }
                 } catch (e: Exception) {
@@ -987,7 +993,7 @@ class MainActivity : FlutterActivity() {
     /// Wi-Fi Control Methods
     /// ========================================================================
 
-    private fun getWifiStatus(): Map<String, Any> {
+    private fun getWifiStatus(): Map<String, Any?> {
         val wifiManager = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
         val enabled = wifiManager.isWifiEnabled
 
@@ -1002,8 +1008,9 @@ class MainActivity : FlutterActivity() {
             false
         }
 
-        Log.d(TAG, "Wi-Fi status — enabled: $enabled, connected: $connected")
-        return mapOf("enabled" to enabled, "connected" to connected)
+        val ssid = if (connected) getCurrentSsid(wifiManager) else null
+        Log.d(TAG, "Wi-Fi status — enabled: $enabled, connected: $connected, ssid: $ssid")
+        return mapOf("enabled" to enabled, "connected" to connected, "ssid" to ssid)
     }
 
     @Suppress("DEPRECATION")
@@ -1028,6 +1035,75 @@ class MainActivity : FlutterActivity() {
         } catch (e: Exception) {
             Log.e(TAG, "Failed to reconnect Wi-Fi: ${e.message}", e)
             false
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun getCurrentSsid(wifiManager: WifiManager): String? {
+        val ssid = wifiManager.connectionInfo?.ssid?.removeSurrounding("\"")
+        return if (ssid.isNullOrBlank() || ssid == "<unknown ssid>") null else ssid
+    }
+
+    @Suppress("DEPRECATION")
+    private fun scanWifiNetworks(): List<Map<String, Any>> {
+        return try {
+            val wifiManager = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+            val connectedSsid = getCurrentSsid(wifiManager)
+            wifiManager.startScan()
+            val results = wifiManager.scanResults ?: emptyList()
+            results
+                .filter { it.SSID.isNotBlank() }
+                .distinctBy { it.SSID }
+                .sortedByDescending { it.level }
+                .map { result ->
+                    mapOf(
+                        "ssid" to result.SSID,
+                        "level" to result.level,
+                        "secured" to (result.capabilities.contains("WPA") ||
+                                      result.capabilities.contains("WEP")),
+                        "connected" to (result.SSID == connectedSsid)
+                    )
+                }
+        } catch (e: Exception) {
+            Log.e(TAG, "scanWifiNetworks failed: ${e.message}", e)
+            emptyList()
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun connectToWifiNetwork(ssid: String, password: String): Map<String, Any> {
+        return try {
+            val wifiManager = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+            if (!wifiManager.isWifiEnabled) {
+                @Suppress("DEPRECATION")
+                wifiManager.setWifiEnabled(true)
+            }
+            val config = android.net.wifi.WifiConfiguration().apply {
+                SSID = "\"$ssid\""
+                if (password.isBlank()) {
+                    allowedKeyManagement.set(android.net.wifi.WifiConfiguration.KeyMgmt.NONE)
+                } else {
+                    preSharedKey = "\"$password\""
+                    allowedKeyManagement.set(android.net.wifi.WifiConfiguration.KeyMgmt.WPA_PSK)
+                }
+            }
+            // Remove any existing saved config for this SSID
+            wifiManager.configuredNetworks
+                ?.filter { it.SSID == "\"$ssid\"" }
+                ?.forEach { wifiManager.removeNetwork(it.networkId) }
+
+            val networkId = wifiManager.addNetwork(config)
+            if (networkId == -1) {
+                Log.e(TAG, "addNetwork returned -1 for SSID: $ssid")
+                return mapOf("initiated" to false)
+            }
+            wifiManager.enableNetwork(networkId, true)
+            wifiManager.reconnect()
+            Log.i(TAG, "connectToWifiNetwork initiated for SSID: $ssid")
+            mapOf("initiated" to true)
+        } catch (e: Exception) {
+            Log.e(TAG, "connectToWifiNetwork failed: ${e.message}", e)
+            mapOf("initiated" to false)
         }
     }
 
