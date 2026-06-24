@@ -13,6 +13,36 @@ class WifiStatus {
   bool get isEnabled => state != WifiConnectionState.disabled;
 }
 
+class WifiNetwork {
+  final String ssid;
+  final int signalLevel; // 0–4 bars
+  final bool isSecured;
+  final bool isConnected;
+
+  const WifiNetwork({
+    required this.ssid,
+    required this.signalLevel,
+    required this.isSecured,
+    required this.isConnected,
+  });
+
+  static int _rssiToLevel(int rssi) {
+    if (rssi >= -60) return 4;
+    if (rssi >= -70) return 3;
+    if (rssi >= -80) return 2;
+    return 1;
+  }
+
+  factory WifiNetwork.fromMap(Map<dynamic, dynamic> map) {
+    return WifiNetwork(
+      ssid: map['ssid'] as String? ?? '',
+      signalLevel: _rssiToLevel(map['level'] as int? ?? -100),
+      isSecured: map['secured'] as bool? ?? false,
+      isConnected: map['connected'] as bool? ?? false,
+    );
+  }
+}
+
 class WifiService {
   WifiService._();
   static final WifiService instance = WifiService._();
@@ -26,6 +56,9 @@ class WifiService {
 
   WifiStatus _currentStatus = const WifiStatus(WifiConnectionState.disabled);
   WifiStatus get currentStatus => _currentStatus;
+
+  String? _connectedSsid;
+  String? get connectedSsid => _connectedSsid;
 
   Timer? _pollTimer;
   int _consecutiveFailures = 0;
@@ -55,6 +88,7 @@ class WifiService {
 
       final enabled = result['enabled'] as bool? ?? false;
       final connected = result['connected'] as bool? ?? false;
+      _connectedSsid = result['ssid'] as String?;
 
       final state = !enabled
           ? WifiConnectionState.disabled
@@ -123,6 +157,44 @@ class WifiService {
       Logger.error('Failed to reconnect Wi-Fi: ${e.message}',
           context: 'WifiService');
       _consecutiveFailures++;
+      return false;
+    }
+  }
+
+  Future<List<WifiNetwork>> scanNetworks() async {
+    try {
+      final result = await _channel.invokeMethod<List<dynamic>>(
+        KioskMethods.scanWifiNetworks,
+      );
+      if (result == null) return [];
+      return result
+          .cast<Map<dynamic, dynamic>>()
+          .map(WifiNetwork.fromMap)
+          .toList();
+    } on PlatformException catch (e) {
+      Logger.error('Failed to scan networks: ${e.message}',
+          context: 'WifiService');
+      return [];
+    }
+  }
+
+  Future<bool> connectToNetwork(String ssid, String password) async {
+    try {
+      final result = await _channel.invokeMethod<Map<dynamic, dynamic>>(
+        KioskMethods.connectToWifiNetwork,
+        {'ssid': ssid, 'password': password},
+      );
+      final initiated = result?['initiated'] as bool? ?? false;
+      if (!initiated) return false;
+
+      // Wait for OS to establish the connection, then re-read status
+      await Future.delayed(const Duration(seconds: 5));
+      await _fetchAndEmit();
+
+      return _connectedSsid == ssid;
+    } on PlatformException catch (e) {
+      Logger.error('Failed to connect to network: ${e.message}',
+          context: 'WifiService');
       return false;
     }
   }
