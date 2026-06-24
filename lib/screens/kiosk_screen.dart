@@ -128,92 +128,11 @@ class _KioskScreenState extends State<KioskScreen> with WidgetsBindingObserver {
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: const Color(0xFF1A1A2E),
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setS) => Padding(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: Colors.white24,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                'Wi-Fi',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 8),
-              StreamBuilder<WifiStatus>(
-                stream: WifiService.instance.wifiStream,
-                initialData: WifiService.instance.currentStatus,
-                builder: (context, snapshot) {
-                  final status = snapshot.data ?? WifiService.instance.currentStatus;
-                  final statusText = switch (status.state) {
-                    WifiConnectionState.connected => 'Connected',
-                    WifiConnectionState.disconnected => 'Not connected',
-                    WifiConnectionState.disabled => 'Wi-Fi Off',
-                  };
-                  final statusColor = switch (status.state) {
-                    WifiConnectionState.connected => Colors.green[400]!,
-                    WifiConnectionState.disconnected => Colors.orange,
-                    WifiConnectionState.disabled => Colors.grey,
-                  };
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(statusText, style: TextStyle(color: statusColor, fontSize: 14)),
-                      const SizedBox(height: 16),
-                      SwitchListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text(
-                          'Enable Wi-Fi',
-                          style: TextStyle(color: Colors.white),
-                        ),
-                        value: status.isEnabled,
-                        activeThumbColor: const Color(0xFF4FC3F7),
-                        onChanged: (val) async {
-                          await WifiService.instance.setWifiEnabled(val);
-                          setS(() {});
-                        },
-                      ),
-                      if (status.state == WifiConnectionState.disconnected) ...[
-                        const SizedBox(height: 8),
-                        ElevatedButton.icon(
-                          onPressed: () async {
-                            await WifiService.instance.reconnect();
-                            setS(() {});
-                          },
-                          icon: const Icon(Icons.refresh),
-                          label: const Text('Reconnect Now'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF1A237E),
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                          ),
-                        ),
-                      ],
-                    ],
-                  );
-                },
-              ),
-            ],
-          ),
-        ),
-      ),
+      builder: (ctx) => _WifiBottomSheet(),
     );
   }
 
@@ -1004,6 +923,326 @@ class _AdminPinDialogState extends State<_AdminPinDialog> {
             await widget.onVerify(_controller.text);
           },
           child: const Text('Verify', style: TextStyle(color: Color(0xFF4FC3F7))),
+        ),
+      ],
+    );
+  }
+}
+
+// ============================================================================
+// WiFi Bottom Sheet
+// ============================================================================
+
+class _WifiBottomSheet extends StatefulWidget {
+  @override
+  State<_WifiBottomSheet> createState() => _WifiBottomSheetState();
+}
+
+class _WifiBottomSheetState extends State<_WifiBottomSheet> {
+  List<WifiNetwork>? _networks;
+  bool _scanning = false;
+
+  Future<void> _scan() async {
+    setState(() {
+      _scanning = true;
+      _networks = null;
+    });
+    final results = await WifiService.instance.scanNetworks();
+    if (mounted) {
+      setState(() {
+        _networks = results;
+        _scanning = false;
+      });
+    }
+  }
+
+  void _onNetworkTap(WifiNetwork network) {
+    if (network.isConnected) return;
+    if (network.isSecured) {
+      _showPasswordDialog(network.ssid);
+    } else {
+      _connectTo(network.ssid, '');
+    }
+  }
+
+  Future<void> _connectTo(String ssid, String password) async {
+    final success = await WifiService.instance.connectToNetwork(ssid, password);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          success
+              ? 'Connected to $ssid'
+              : 'Could not connect — check the password and try again.',
+        ),
+        backgroundColor: success ? const Color(0xFF1A237E) : Colors.red,
+      ),
+    );
+    await _scan();
+  }
+
+  void _showPasswordDialog(String ssid) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => _WifiPasswordDialog(
+        ssid: ssid,
+        onConnect: (password) {
+          Navigator.pop(ctx);
+          _connectTo(ssid, password);
+        },
+      ),
+    );
+  }
+
+  Widget _signalIcon(int level, bool isConnected) {
+    final color = isConnected ? Colors.green[400]! : const Color(0xFF4FC3F7);
+    final icon = level >= 3 ? Icons.wifi : (level == 2 ? Icons.wifi_2_bar : Icons.wifi_1_bar);
+    return Icon(icon, color: color, size: 20);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.55,
+      minChildSize: 0.4,
+      maxChildSize: 0.85,
+      builder: (ctx, scrollController) => SingleChildScrollView(
+        controller: scrollController,
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.white24,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Wi-Fi',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 8),
+            StreamBuilder<WifiStatus>(
+              stream: WifiService.instance.wifiStream,
+              initialData: WifiService.instance.currentStatus,
+              builder: (context, snapshot) {
+                final status =
+                    snapshot.data ?? WifiService.instance.currentStatus;
+                final ssid = WifiService.instance.connectedSsid;
+                final statusText = switch (status.state) {
+                  WifiConnectionState.connected =>
+                    ssid != null ? 'Connected to $ssid' : 'Connected',
+                  WifiConnectionState.disconnected => 'Not connected',
+                  WifiConnectionState.disabled => 'Wi-Fi Off',
+                };
+                final statusColor = switch (status.state) {
+                  WifiConnectionState.connected => Colors.green[400]!,
+                  WifiConnectionState.disconnected => Colors.orange,
+                  WifiConnectionState.disabled => Colors.grey,
+                };
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      statusText,
+                      style: TextStyle(color: statusColor, fontSize: 14),
+                    ),
+                    const SizedBox(height: 16),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text(
+                        'Enable Wi-Fi',
+                        style: TextStyle(color: Colors.white),
+                      ),
+                      value: status.isEnabled,
+                      activeThumbColor: const Color(0xFF4FC3F7),
+                      onChanged: (val) async {
+                        await WifiService.instance.setWifiEnabled(val);
+                        setState(() {});
+                      },
+                    ),
+                    if (status.state == WifiConnectionState.disconnected) ...[
+                      const SizedBox(height: 8),
+                      ElevatedButton.icon(
+                        onPressed: () async {
+                          await WifiService.instance.reconnect();
+                          setState(() {});
+                        },
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Reconnect Now'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF1A237E),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                      ),
+                    ],
+                  ],
+                );
+              },
+            ),
+            const SizedBox(height: 20),
+            const Divider(color: Colors.white12),
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Available Networks',
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                _scanning
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Color(0xFF4FC3F7),
+                        ),
+                      )
+                    : TextButton(
+                        onPressed: _scan,
+                        child: const Text(
+                          'Scan',
+                          style: TextStyle(color: Color(0xFF4FC3F7)),
+                        ),
+                      ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            if (_networks == null && !_scanning)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 16),
+                child: Text(
+                  'Tap Scan to see available networks.',
+                  style: TextStyle(color: Colors.white38, fontSize: 13),
+                  textAlign: TextAlign.center,
+                ),
+              )
+            else if (_networks != null && _networks!.isEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 16),
+                child: Text(
+                  'No networks found. Tap Scan to retry.',
+                  style: TextStyle(color: Colors.white38, fontSize: 13),
+                  textAlign: TextAlign.center,
+                ),
+              )
+            else if (_networks != null)
+              ...(_networks!.map(
+                (network) => ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: _signalIcon(network.signalLevel, network.isConnected),
+                  title: Text(
+                    network.ssid,
+                    style: const TextStyle(color: Colors.white, fontSize: 14),
+                  ),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (network.isSecured)
+                        const Icon(Icons.lock, color: Colors.white38, size: 14),
+                      if (network.isConnected) ...[
+                        const SizedBox(width: 6),
+                        const Icon(Icons.check_circle,
+                            color: Colors.green, size: 16),
+                      ],
+                    ],
+                  ),
+                  onTap: () => _onNetworkTap(network),
+                ),
+              )),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ============================================================================
+// WiFi Password Dialog
+// ============================================================================
+
+class _WifiPasswordDialog extends StatefulWidget {
+  final String ssid;
+  final void Function(String password) onConnect;
+
+  const _WifiPasswordDialog({required this.ssid, required this.onConnect});
+
+  @override
+  State<_WifiPasswordDialog> createState() => _WifiPasswordDialogState();
+}
+
+class _WifiPasswordDialogState extends State<_WifiPasswordDialog> {
+  final _controller = TextEditingController();
+  bool _obscure = true;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: const Color(0xFF1A1A2E),
+      title: Text(
+        'Connect to ${widget.ssid}',
+        style: const TextStyle(color: Colors.white, fontSize: 16),
+      ),
+      content: TextField(
+        controller: _controller,
+        obscureText: _obscure,
+        autofocus: true,
+        style: const TextStyle(color: Colors.white),
+        decoration: InputDecoration(
+          labelText: 'Password',
+          labelStyle: const TextStyle(color: Colors.white54),
+          enabledBorder: const OutlineInputBorder(
+            borderSide: BorderSide(color: Colors.white24),
+          ),
+          focusedBorder: const OutlineInputBorder(
+            borderSide: BorderSide(color: Color(0xFF4FC3F7)),
+          ),
+          suffixIcon: IconButton(
+            icon: Icon(
+              _obscure ? Icons.visibility : Icons.visibility_off,
+              color: Colors.white38,
+            ),
+            onPressed: () => setState(() => _obscure = !_obscure),
+          ),
+        ),
+        onChanged: (_) => setState(() {}),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel', style: TextStyle(color: Colors.white38)),
+        ),
+        TextButton(
+          onPressed: _controller.text.length >= 8
+              ? () => widget.onConnect(_controller.text)
+              : null,
+          child: const Text(
+            'Connect',
+            style: TextStyle(color: Color(0xFF4FC3F7)),
+          ),
         ),
       ],
     );

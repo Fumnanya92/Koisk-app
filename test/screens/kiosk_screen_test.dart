@@ -120,6 +120,97 @@ void main() {
     expect(find.text('Wi-Fi disconnected — reconnecting…'), findsOneWidget);
   });
 
+  testWidgets('wifi bottom sheet shows network list after scan', (tester) async {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+      if (call.method == KioskMethods.isDeviceOwner) return true;
+      if (call.method == KioskMethods.getDeviceInfo) {
+        return <String, dynamic>{'model': 'test-device'};
+      }
+      if (call.method == KioskMethods.getWifiStatus) {
+        return {'enabled': true, 'connected': true, 'ssid': 'Estate_WiFi'};
+      }
+      if (call.method == KioskMethods.scanWifiNetworks) {
+        return [
+          {'ssid': 'Estate_WiFi', 'level': -55, 'secured': true, 'connected': true},
+          {'ssid': 'John_Hotspot', 'level': -70, 'secured': true, 'connected': false},
+        ];
+      }
+      return true;
+    });
+
+    await WifiService.instance.initialize();
+    await tester.pumpWidget(const MaterialApp(home: KioskScreen()));
+    await tester.pump();
+    WifiService.instance.dispose();
+    await tester.pumpAndSettle();
+
+    if (find.text('OK').evaluate().isNotEmpty) {
+      await tester.tap(find.text('OK'));
+      await tester.pumpAndSettle();
+    }
+
+    // Tap WiFi icon to open bottom sheet
+    final wifiIcon = find.byWidgetPredicate(
+      (w) => w is Icon && (w.icon == Icons.wifi || w.icon == Icons.wifi_off),
+    ).first;
+    await tester.tap(wifiIcon, warnIfMissed: false);
+    await tester.pumpAndSettle();
+
+    // Tap Scan button
+    expect(find.text('Scan'), findsOneWidget);
+    await tester.tap(find.text('Scan'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Estate_WiFi'), findsWidgets);
+    expect(find.text('John_Hotspot'), findsOneWidget);
+  });
+
+  testWidgets('tapping secured network shows password dialog', (tester) async {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+      if (call.method == KioskMethods.isDeviceOwner) return true;
+      if (call.method == KioskMethods.getDeviceInfo) {
+        return <String, dynamic>{'model': 'test-device'};
+      }
+      if (call.method == KioskMethods.getWifiStatus) {
+        return {'enabled': true, 'connected': true, 'ssid': 'Estate_WiFi'};
+      }
+      if (call.method == KioskMethods.scanWifiNetworks) {
+        return [
+          {'ssid': 'John_Hotspot', 'level': -70, 'secured': true, 'connected': false},
+        ];
+      }
+      return true;
+    });
+
+    await WifiService.instance.initialize();
+    await tester.pumpWidget(const MaterialApp(home: KioskScreen()));
+    await tester.pump();
+    WifiService.instance.dispose();
+    await tester.pumpAndSettle();
+
+    if (find.text('OK').evaluate().isNotEmpty) {
+      await tester.tap(find.text('OK'));
+      await tester.pumpAndSettle();
+    }
+
+    final wifiIcon = find.byWidgetPredicate(
+      (w) => w is Icon && (w.icon == Icons.wifi || w.icon == Icons.wifi_off),
+    ).first;
+    await tester.tap(wifiIcon, warnIfMissed: false);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Scan'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('John_Hotspot'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Connect to John_Hotspot'), findsOneWidget);
+    expect(find.byType(TextField), findsOneWidget);
+  });
+
   testWidgets('entering correct admin PIN opens admin panel', (tester) async {
     await pumpScreen(tester);
 
