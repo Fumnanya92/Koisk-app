@@ -71,6 +71,8 @@ class KioskMethods {
   static const String setWifiEnabled = 'setWifiEnabled';
   static const String reconnectWifi = 'reconnectWifi';
   static const String setIncomingCallsEnabled = 'setIncomingCallsEnabled';
+  static const String scanWifiNetworks = 'scanWifiNetworks';
+  static const String connectToWifiNetwork = 'connectToWifiNetwork';
 }
 
 /// UI Colors

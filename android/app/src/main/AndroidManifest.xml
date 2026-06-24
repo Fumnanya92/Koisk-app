@@ -28,6 +28,9 @@
     <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
+    <!-- Fine location - required for WiFi network scanning on Android 10+ -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+
     <!-- Admin-managed APK updates via the system package installer -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 

@@ -108,6 +108,21 @@ class MainActivity : FlutterActivity() {
             rebuildLockTaskWithoutPhone()
             Log.i(TAG, "Incoming calls remain disabled (saved preference)")
         }
+
+        // Grant location permission to self for WiFi scanning (Device Owner privilege)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && isDeviceOwner()) {
+            try {
+                devicePolicyManager.setPermissionGrantState(
+                    adminComponent,
+                    packageName,
+                    android.Manifest.permission.ACCESS_FINE_LOCATION,
+                    DevicePolicyManager.PERMISSION_GRANT_STATE_GRANTED
+                )
+                Log.i(TAG, "ACCESS_FINE_LOCATION auto-granted via DevicePolicyManager")
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to auto-grant location permission: ${e.message}")
+            }
+        }
     }
 
     override fun onResume() {
